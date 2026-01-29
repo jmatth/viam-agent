@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func (s *syscfg) startLogForwarding() error {
+func (s *Subsystem) startLogForwarding() error {
 	s.logMu.Lock()
 	defer s.logMu.Unlock()
 	s.logHealth.MarkGood()
@@ -136,7 +136,7 @@ func (s *syscfg) startLogForwarding() error {
 	return nil
 }
 
-func (s *syscfg) stopLogForwarding() error {
+func (s *Subsystem) stopLogForwarding() error {
 	if s.journalCmd == nil {
 		return nil
 	}

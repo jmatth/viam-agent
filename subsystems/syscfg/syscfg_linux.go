@@ -8,12 +8,12 @@ import (
 	"sync"
 
 	errw "github.com/pkg/errors"
-	"github.com/viamrobotics/agent/subsystems"
 	"github.com/viamrobotics/agent/utils"
 	"go.viam.com/rdk/logging"
 )
 
-type syscfg struct {
+// Subsystem represents the syscfg subsystem.
+type Subsystem struct {
 	mu      sync.RWMutex
 	cfg     utils.SystemConfiguration
 	logger  logging.Logger
@@ -30,12 +30,12 @@ type syscfg struct {
 	noJournald bool
 }
 
-func NewSubsystem(ctx context.Context,
+func New(ctx context.Context,
 	logger logging.Logger,
 	cfg utils.AgentConfig,
 	getAppenderFunc func() logging.Appender,
-) subsystems.Subsystem {
-	return &syscfg{
+) *Subsystem {
+	return &Subsystem{
 		appender:  getAppenderFunc,
 		logger:    logger,
 		cfg:       cfg.SystemConfiguration,
@@ -43,7 +43,7 @@ func NewSubsystem(ctx context.Context,
 	}
 }
 
-func (s *syscfg) Update(ctx context.Context, cfg utils.AgentConfig) (needRestart bool) {
+func (s *Subsystem) Update(ctx context.Context, cfg utils.AgentConfig) (needRestart bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -55,7 +55,7 @@ func (s *syscfg) Update(ctx context.Context, cfg utils.AgentConfig) (needRestart
 	return needRestart
 }
 
-func (s *syscfg) Start(ctx context.Context) error {
+func (s *Subsystem) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -98,7 +98,7 @@ func (s *syscfg) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *syscfg) Stop(ctx context.Context) error {
+func (s *Subsystem) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.started {
@@ -109,16 +109,11 @@ func (s *syscfg) Stop(ctx context.Context) error {
 	return errw.Wrap(s.stopLogForwarding(), "stopping kernel log forwarding")
 }
 
-func (s *syscfg) HealthCheck(ctx context.Context) error {
+func (s *Subsystem) HealthCheck(ctx context.Context) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.healthy && (s.journalCmd == nil || s.logHealth.IsHealthy()) {
 		return nil
 	}
 	return errors.New("healthcheck failed")
-}
-
-// Property is a noop for the syscfg subsystem.
-func (s *syscfg) Property(_ context.Context, _ string) bool {
-	return false
 }

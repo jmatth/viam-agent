@@ -193,7 +193,7 @@ func TestLogForwarderFilter(t *testing.T) {
 
 			appender := &mockAppender{}
 
-			sys := NewSubsystem(ctx, logger, cfg, func() logging.Appender {
+			sys := New(ctx, logger, cfg, func() logging.Appender {
 				return appender
 			})
 
