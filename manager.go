@@ -342,70 +342,73 @@ func (m *Manager) SubsystemHealthChecks(ctx context.Context) {
 	// Start each of the three subsystems if not disabled; each implementation should return
 	// near-instantly if already started. Run health checks for syscfg and networking and
 	// restart upon failure. The ordering of subsystem starts is significant here.
-	if !m.cfg.AdvancedSettings.DisableViamServer.Get() {
-		if err := m.viamServer.Start(ctx); err != nil {
-			m.logger.Warn(err)
+	for _, s := range []struct {
+		name     string
+		subsys   subsystem
+		disabled bool
+	}{
+		{"viam-server", m.viamServer, m.cfg.AdvancedSettings.DisableViamServer.Get()},
+		{"sysconfig", m.sysConfig, m.cfg.AdvancedSettings.DisableSystemConfiguration.Get()},
+		{"networking", m.networking, m.cfg.AdvancedSettings.DisableNetworkConfiguration.Get()},
+	} {
+		if s.disabled {
+			continue
 		}
+		m.startAndHealthCheck(ctx, s.name, s.subsys)
 	}
-	//nolint:dupl
-	if !m.cfg.AdvancedSettings.DisableSystemConfiguration.Get() {
-		if err := m.sysConfig.Start(ctx); err != nil {
-			m.logger.Warn(err)
-		}
+}
 
-		ctxTimeout, cancelFunc := context.WithTimeout(ctx, time.Second*15)
-		defer cancelFunc()
-		if err := m.sysConfig.HealthCheck(ctxTimeout); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			m.logger.Errorw(
-				"sysconfig healthcheck failed, subsystem will be shut down",
-				"err", err,
-			)
-			if err := m.sysConfig.Stop(ctx); err != nil {
-				m.logger.Warn(errw.Wrap(err, "stopping syscfg subsystem"))
-			}
-			if ctx.Err() != nil {
-				return
-			}
+// subsystem is a common interface for managed subsystems. It should be used
+// sparingly to reduce code duplication. Call sites that work with a specific
+// subsystem should use the API provided by the concrete type instead.
+type subsystem interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+}
 
-			if err := m.sysConfig.Start(ctx); err != nil {
-				m.logger.Warn(errw.Wrap(err, "restarting syscfg subsystem"))
-			}
-		} else {
-			m.logger.Debugf("Subsystem healthcheck succeeded for syscfg")
-		}
+// subsystemWithHealthCheck is an extension of [subsystem] for systems that
+// support health checks.
+type subsystemWithHealthCheck interface {
+	subsystem
+	HealthCheck(ctx context.Context) error
+}
+
+// startAndHealthCheck provides common funcionality.
+func (m *Manager) startAndHealthCheck(ctx context.Context, subsysName string, subsys subsystem) {
+	if ctx.Err() != nil {
+		return
 	}
-	//nolint:dupl
-	if !m.cfg.AdvancedSettings.DisableNetworkConfiguration.Get() {
-		if err := m.networking.Start(ctx); err != nil {
-			m.logger.Warn(err)
+	if err := subsys.Start(ctx); err != nil {
+		m.logger.Warn(err)
+	}
+	hSubsys, ok := subsys.(subsystemWithHealthCheck)
+	if !ok {
+		return
+	}
+
+	ctxTimeout, cancelFunc := context.WithTimeout(ctx, time.Second*15)
+	defer cancelFunc()
+	if err := hSubsys.HealthCheck(ctxTimeout); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		m.logger.Errorw(
+			"Subsystem healthcheck failed, subsystem will be shut down",
+			"subsystem", subsysName,
+			"err", err,
+		)
+		if err := subsys.Stop(ctx); err != nil {
+			m.logger.Warn(errw.Wrapf(err, "stopping %s subsystem", subsysName))
+		}
+		if ctx.Err() != nil {
+			return
 		}
 
-		ctxTimeout, cancelFunc := context.WithTimeout(ctx, time.Second*15)
-		defer cancelFunc()
-		if err := m.networking.HealthCheck(ctxTimeout); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			m.logger.Errorw(
-				"networking healthcheck failed, subsystem will be shut down",
-				"err", err,
-			)
-			if err := m.networking.Stop(ctx); err != nil {
-				m.logger.Warn(errw.Wrap(err, "stopping networking subsystem"))
-			}
-			if ctx.Err() != nil {
-				return
-			}
-
-			if err := m.networking.Start(ctx); err != nil {
-				m.logger.Warn(errw.Wrap(err, "restarting networking subsystem"))
-			}
-		} else {
-			m.logger.Debugf("Subsystem healthcheck succeeded for networking")
+		if err := subsys.Start(ctx); err != nil {
+			m.logger.Warn(errw.Wrapf(err, "restarting %s subsystem", subsysName))
 		}
+	} else {
+		m.logger.Debugf("Subsystem healthcheck succeeded for %s", subsysName)
 	}
 }
 
