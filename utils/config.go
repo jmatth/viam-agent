@@ -141,6 +141,7 @@ func (as AdvancedSettings) GetDisableNetworkConfiguration() bool {
 	if !CLIEnableNetworkingSubsystem {
 		return true
 	}
+	//nolint:goconst
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		return true
 	}
