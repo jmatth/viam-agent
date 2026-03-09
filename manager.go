@@ -632,8 +632,7 @@ func (m *Manager) StartBackgroundChecks(ctx context.Context) {
 		}
 	}()
 
-	m.activeBackgroundWorkers.Add(1)
-	go func() {
+	m.activeBackgroundWorkers.Go(func() {
 		defer m.activeBackgroundWorkers.Done()
 
 		ticker := time.NewTicker(osRebootCheckInterval)
@@ -646,7 +645,7 @@ func (m *Manager) StartBackgroundChecks(ctx context.Context) {
 				m.CheckIfOSNeedsReboot(ctx)
 			}
 		}
-	}()
+	})
 }
 
 // dial establishes a connection to the cloud for grpc communication.
