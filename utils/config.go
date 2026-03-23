@@ -153,7 +153,7 @@ func (as AdvancedSettings) GetDisableSystemConfiguration() bool {
 	if !CLIEnableSyscfgSubsystem {
 		return true
 	}
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+	if runtime.GOOS == "darwin" {
 		return true
 	}
 	return as.DisableSystemConfiguration.Get()
