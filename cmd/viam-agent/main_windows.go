@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/user"
 	"time"
 
 	"github.com/viamrobotics/agent"
@@ -51,7 +52,9 @@ func main() {
 		}
 		//nolint:errcheck
 		defer elog.Close()
-		elog.Info(1, fmt.Sprintf("Doing admin things at %v", time.Now()))
+		token := windows.GetCurrentProcessToken()
+		u, _ := user.Current()
+		elog.Info(1, fmt.Sprintf("Doing admin things at %v as (%v, %v, %v) (token.isElevated: %v)", time.Now(), u.Name, u.Username, u.Uid, token.IsElevated()))
 		return
 	}
 
@@ -71,6 +74,9 @@ func main() {
 
 	var err error
 	elog, err = eventlog.Open(serviceName)
+	token := windows.GetCurrentProcessToken()
+	u, _ := user.Current()
+	elog.Info(1, fmt.Sprintf("viam-agent starting at %v as (%v, %v, %v) (token.isElevated: %v)", time.Now(), u.Name, u.Username, u.Uid, token.IsElevated()))
 	if err != nil {
 		return
 	}
