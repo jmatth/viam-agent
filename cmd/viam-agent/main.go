@@ -345,6 +345,9 @@ func startIPC(ctx context.Context) error {
 			conn, err := l.Accept()
 			if err != nil {
 				globalLogger.Errorw("Error accepting IPC connection", "err", err)
+				if ctx.Err() != nil {
+					return
+				}
 				continue
 			}
 			go func(c net.Conn) {

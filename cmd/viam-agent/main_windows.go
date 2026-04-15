@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/viamrobotics/agent"
 	"github.com/viamrobotics/agent/utils"
@@ -50,7 +51,7 @@ func main() {
 		}
 		//nolint:errcheck
 		defer elog.Close()
-		elog.Info(1, "Doing admin things...")
+		elog.Info(1, fmt.Sprintf("Doing admin things at %v", time.Now()))
 		return
 	}
 
