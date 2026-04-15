@@ -43,6 +43,17 @@ func (*agentService) Execute(args []string, r <-chan svc.ChangeRequest, changes 
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "ADMIN" {
+		elog, err := eventlog.Open("viam-agent-admin")
+		if err != nil {
+			panic(err)
+		}
+		//nolint:errcheck
+		defer elog.Close()
+		elog.Info(1, "Doing admin things...")
+		return
+	}
+
 	if inService, err := svc.IsWindowsService(); err != nil {
 		panic(err)
 	} else if !inService {

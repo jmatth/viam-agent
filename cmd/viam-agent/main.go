@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -20,6 +22,7 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/nightlyone/lockfile"
 	"github.com/pkg/errors"
+	"github.com/samber/mo"
 	"github.com/viamrobotics/agent"
 	_ "github.com/viamrobotics/agent/subsystems/syscfg"
 	"github.com/viamrobotics/agent/utils"
@@ -27,6 +30,7 @@ import (
 	"github.com/viamrobotics/agent/utils/systemd"
 	"go.uber.org/zap"
 	"go.viam.com/rdk/logging"
+	"golang.org/x/sys/windows"
 )
 
 var (
@@ -186,6 +190,11 @@ func commonMain() {
 	// getLock will err if another Agent is running, but not if a lockfile remains after Agent crashes unexpectedly
 	// exit if we are unable to get the lockfile
 	exitIfError(err, false)
+
+	if err := startIPC(ctx); err != nil {
+		exitIfError(err, false)
+	}
+
 	defer func() {
 		if err := pidFile.Unlock(); err != nil {
 			globalLogger.Error(errors.Wrapf(err, "unlocking %s", pidFile))
@@ -318,6 +327,55 @@ func exitIfError(err error, cleanupBeforeExit bool) {
 		}
 		globalLogger.WithOptions(zap.AddCallerSkip(1)).Fatal(err)
 	}
+}
+
+func startIPC(ctx context.Context) error {
+	const ipcPath = `C:\opt\viam\tmp\viam-agent-win.sock`
+	os.Remove(ipcPath)
+	listener, err := net.Listen("unix", ipcPath)
+	if err != nil {
+		return err
+	}
+	go func() {
+		<-ctx.Done()
+		listener.Close()
+	}()
+	go func(l net.Listener) {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				globalLogger.Errorw("Error accepting IPC connection", "err", err)
+				continue
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				globalLogger.Debugw("Received IPC connection")
+				var buffer bytes.Buffer
+				_, err := io.Copy(&buffer, c)
+				if err != nil {
+					globalLogger.Errorw("Error reading from IPC", "err", err)
+					return
+				}
+				msg := buffer.String()
+				globalLogger.Debugw("Received IPC data", "data", msg)
+				if msg == "ADMIN" {
+					globalLogger.Infow("Starting admin subprocess", "exe", os.Args[0])
+					err := windows.ShellExecute(
+						windows.InvalidHandle,
+						mo.TupleToResult(windows.UTF16PtrFromString("runas")).MustGet(),
+						mo.TupleToResult(windows.UTF16PtrFromString(os.Args[0])).MustGet(),
+						mo.TupleToResult(windows.UTF16PtrFromString("ADMIN")).MustGet(),
+						nil,
+						0,
+					)
+					if err != nil {
+						globalLogger.Errorw("Failed to start admin subprocess", "err", err)
+					}
+				}
+			}(conn)
+		}
+	}(listener)
+	return nil
 }
 
 func getLock() (lockfile.Lockfile, error) {
